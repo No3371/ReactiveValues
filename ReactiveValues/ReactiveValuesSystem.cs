@@ -5,6 +5,11 @@ using System.Runtime.CompilerServices;
 using UnityEngine;
 
 
+public class FormulaBindings
+{
+    public (int sourceIndex, float value)[] bindings;
+}
+
 public class ReactiveValuesSystem
 {
     const uint MAX_VERSION_DIFF_TOLERANCE = uint.MaxValue/2;
@@ -16,6 +21,8 @@ public class ReactiveValuesSystem
     public bool AnyChangesSinceLastGet { get; private set; }
     HashSet<int> changed;
     ModifiedDynamicFloat[] allValues;
+    static ModifiedDynamicFloat[] formulas;
+    FormulaBindings[] bindings;
     int valueCount = 0, startingValueBlockLength = 0;
     public ReactiveValuesSystem()
     {
@@ -23,6 +30,11 @@ public class ReactiveValuesSystem
         this.AnyChangesSinceLastGet = false;
         this.changed = new HashSet<int>();
         this.allValues = new ModifiedDynamicFloat[8];
+    }
+
+    public static int MakeFormula (params ValueModifier[] modifiers)
+    {
+        ModifiedDynamicFloat newFormula = new ModifiedDynamicFloat(modifiers);
     }
 
     public int MakeValue(params ValueModifier[] modifiers)
@@ -87,6 +99,7 @@ public class ReactiveValuesSystem
         ModifiedDynamicFloat subject = allValues[index];
         if (subject == null) throw new System.NullReferenceException("Nonexist value at " + index);
 
+        bool recalculate = false;
         if (subject.LastAccessedVersion < SystemVersion) // If this is true, this means
             for (int i = 0; i < subject.modifiers.Length; i++) // If any of the source values is newer then this, RECALCULATE 
             {
@@ -97,10 +110,9 @@ public class ReactiveValuesSystem
                     {
                         subject.modifiers[i].value = GetValue(source); // Update cache of source value
                         Recalculate(subject);
-                        subject.changesNotRecalculated = false;
-                        subject.Version = SystemVersion++;
+                        recalculate = true;
                         LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: source updated)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
-                        return subject.CachedModifiedValue;
+                        break;
                     }
                 }
             }
@@ -108,7 +120,57 @@ public class ReactiveValuesSystem
         if (SystemVersion - subject.Version > MAX_VERSION_DIFF_TOLERANCE) // Handling extreame case: Even if there's no value change, RECALCULATE to prevent any value being updated too rarely that makes the system can not handle version numver overflowing 
         {
             Recalculate(subject);
+            recalculate = true;
             LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: version too old, MAX_VERSION_DIFF_TOLERANCE triggered)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
+        }
+
+        if (recalculate)
+        {
+            subject.changesNotRecalculated = false;
+            subject.Version = SystemVersion++;
+            CompressIfVersionWillOverflow();
+        }
+
+        subject.LastAccessedVersion = SystemVersion;
+        return subject.CachedModifiedValue;
+    }
+
+    internal float RunFormula (int index)
+    {
+        if (index >)
+        ModifiedDynamicFloat formula = formulas[index];
+        if (formula == null) throw new System.NullReferenceException("Nonexist formula at " + index);
+        
+        if (changed.Count > 0) throw new System.InvalidOperationException("All changes must be applied before getting values!");
+        ModifiedDynamicFloat subject = allValues[index];
+
+        bool recalculate = false;
+        if (subject.LastAccessedVersion < SystemVersion) // If this is true, this means
+            for (int i = 0; i < subject.modifiers.Length; i++) // If any of the source values is newer then this, RECALCULATE 
+            {
+                int source = subject.modifiers[i].sourceIndex;
+                if (source != -1)
+                {
+                    if (allValues[source].Version > subject.Version)
+                    {
+                        subject.modifiers[i].value = GetValue(source); // Update cache of source value
+                        Recalculate(subject);
+                        recalculate = true;
+                        LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: source updated)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
+                        break;
+                    }
+                }
+            }
+
+        if (SystemVersion - subject.Version > MAX_VERSION_DIFF_TOLERANCE) // Handling extreame case: Even if there's no value change, RECALCULATE to prevent any value being updated too rarely that makes the system can not handle version numver overflowing 
+        {
+            Recalculate(subject);
+            recalculate = true;
+            LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: version too old, MAX_VERSION_DIFF_TOLERANCE triggered)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
+        }
+
+        if (recalculate)
+        {
             subject.changesNotRecalculated = false;
             subject.Version = SystemVersion++;
             CompressIfVersionWillOverflow();
