@@ -10,16 +10,16 @@ C#.
     Unlike *Value*, everytime it's used, the result is not cached.
     It's useful to save memory space when a lot of *ValueSystems* share a complex rule, e.g. 100000 players shares `LUCK = (ATK + DEX + INT + CON + CHARM) * 0.1`.
   - EX1: `ATK = STR * 10` is a *Formula* which needs 1 parameter to run.
-> 
+```
   - Value: {
     BaseValue: 0
     Modifiers: [
       { SET, p:0 }
       { MULTIPLY, 10}
     ]
-  }
+```
   - EX2: `DMG = 1 + ATK + DMG_BONUS` is a *Formula* which needs 2 parameter to run.
-> 
+``` 
   - Value: {
     BaseValue: 1
     Modifiers: [
@@ -27,17 +27,13 @@ C#.
       { ADD, p:1 }
     ]
   }
-- **FormulaBind**: binding a Value to a formula. It's the bridge between *ValueSystem* and *Formula*. It's reference object and can be shared by *ValueSystems*.
-> - FormulaBindings {
-  Paramters: [
-    { int Reference, float Value }...
-  ]
-}
+```
+- **FormulaBinding**: binding a Value to a formula. It's the bridge between *ValueSystem* and *Formula*. It's reference object and can be shared by *ValueSystems*.
 - **RootValue**: *ValueSystems* will keep track of *Values* that does not reference to other *Values*. This is important because this value is the input of the system, the actual state. All *Values* except *RootValues* depends on *RootValues*.
 
 ## Design Samples
 If you have more then one players/characters/statsOwners in a RPG game, you use this framework to maintain their stats, every one of them is a independent *ValuesSystem*. However they may share *Formulas*, for example, all players use `ATK = STR * 10` to calculate  their attacking power, so instead of spamming this *Value* in every *ValueSystem*:
-> 
+```
   - ATK: {
     BaseValue: 0
     Modifiers: [
@@ -45,8 +41,9 @@ If you have more then one players/characters/statsOwners in a RPG game, you use 
       { MULTIPLY, 10}
     ]
   }
-You create the *Formula*
-> 
+```
+you create the *Formula*:
+``` 
   - Formula[0]: {
     BaseValue: 0
     Modifiers: [
@@ -54,17 +51,18 @@ You create the *Formula*
       { MULTIPLY, 10}
     ]
   }
->
-binding all the *ValueSystems* to it
-> 
+```
+make the ATK use the *Formula*:
+```
   - ATK: {
     BaseValue: 0
     Modifiers: [
       { SET, ref:0, isFormula }
     ]
   }
-now make the binding
->
+```
+now make the binding:
+```
   ValueSystem {
     Bindings: [
       [0]: FormulaBinding {
@@ -74,6 +72,7 @@ now make the binding
       }
     ]
   }
+```
 So now when the *ValueSystem* is calculating ATK, it looks for the Formula[0], feed it with the system's STR, and have the result as ATK.
 
 ## Usage Guideline
@@ -170,6 +169,6 @@ Several observations:
     dmgModifier = -100;
     finalDmgMultiplier = 2;
     ```
-whenver any of the lines appears in your codebase you place a `RecalculateDMG();`. Sounds cool.
+    whenver any of the lines appears in your codebase you place a `RecalculateDMG();`... Sounds cool.
 
-You may have realized that, in this way, the model of all these values exist in your head, or on some designer documentation, it's all your labor to maintain the implementation of the model.
+You may have realized that, in this way, the model of all these values exist in your head, or on some designer documentation, it's all your labor to maintain the implementation of the model. Modern problems require modern solutions. It's time to introduce a automatic system to take over the burden.
