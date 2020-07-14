@@ -1,4 +1,5 @@
 #define REACTIVE_VALUE_SYSTEM_LOGGING
+#if UNITY_EDITOR
 using UnityEngine;
 
 public class StatExample : MonoBehaviour
@@ -10,7 +11,7 @@ public class StatExample : MonoBehaviour
     public UnityEngine.UI.InputField TEXT_SPD_STR_WEIGHT, TEXT_SPD_DEX_WEIGHT;
     public UnityEngine.UI.InputField TEXT_LUCK_STR_WEIGHT, TEXT_LUCK_DEX_WEIGHT, TEXT_LUCK_FINAL_MODIFIER;
     
-    ReactiveValuesSystem stat;
+    VariablesSystem stat;
     float strBase = 5, STR_MULTIPLIER = 1.05f, dexBase = 1, atk_strMultiplier = 10, atk_Bonus = 10;
     float SPD_STR_WEIGHT = 0.2f, SPD_DEX_WEIGHT= 0.8f;
     float luck_STRWeight = 0.1f, luck_DEXWeight = 0.1f, luckFinalMultiplier = 0.5f;
@@ -30,9 +31,9 @@ public class StatExample : MonoBehaviour
         TEXT_LUCK_FINAL_MODIFIER.text = luckFinalMultiplier.ToString("F2");
 
         #if REACTIVE_VALUE_SYSTEM_LOGGING
-        ReactiveValuesSystem.logger = Debug.Log;
+        VariablesSystem.logger = Debug.Log;
         #endif
-        stat = new ReactiveValuesSystem();
+        stat = new VariablesSystem();
         int i = 0;
         #if REACTIVE_VALUE_SYSTEM_LOGGING
         stat.NameValue(i++, "STR");
@@ -251,3 +252,5 @@ public class StatExample : MonoBehaviour
         VERSION.text = "VER:  " + stat.SystemVersion.ToString();
     }
 }
+
+#endif

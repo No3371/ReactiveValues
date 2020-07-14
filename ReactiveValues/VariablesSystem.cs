@@ -10,7 +10,7 @@ public class FormulaBindings
     public (int sourceIndex, float value)[] bindings;
 }
 
-public class ReactiveValuesSystem
+public class VariablesSystem
 {
     const uint MAX_VERSION_DIFF_TOLERANCE = uint.MaxValue/2;
     // const uint MAX_VERSION_DIFF_TOLERANCE = 20;
@@ -20,26 +20,26 @@ public class ReactiveValuesSystem
     public uint SystemVersion { get; private set; }
     public bool AnyChangesSinceLastGet { get; private set; }
     HashSet<int> changed;
-    ModifiedDynamicFloat[] allValues;
-    static ModifiedDynamicFloat[] formulas;
+    Variable[] allValues;
+    static Variable[] formulas;
     FormulaBindings[] bindings;
     int valueCount = 0, startingValueBlockLength = 0;
-    public ReactiveValuesSystem()
+    public VariablesSystem()
     {
         this.SystemVersion = 0;
         this.AnyChangesSinceLastGet = false;
         this.changed = new HashSet<int>();
-        this.allValues = new ModifiedDynamicFloat[8];
+        this.allValues = new Variable[8];
     }
 
     public static int MakeFormula (params ValueModifier[] modifiers)
     {
-        ModifiedDynamicFloat newFormula = new ModifiedDynamicFloat(modifiers);
+        Variable newFormula = new Variable(modifiers);
     }
 
     public int MakeValue(params ValueModifier[] modifiers)
     {
-        ModifiedDynamicFloat newValue = new ModifiedDynamicFloat(modifiers);
+        Variable newValue = new Variable(modifiers);
         while (allValues[startingValueBlockLength] != null) startingValueBlockLength++;
         allValues[startingValueBlockLength] = newValue;
         Recalculate(newValue);
@@ -54,7 +54,7 @@ public class ReactiveValuesSystem
     public int MakeValueAtIndex(int index, params ValueModifier[] modifiers)
     {
         if (allValues[index] != null) throw new System.ArgumentException("You can not create new value on existing value's slot!");
-        ModifiedDynamicFloat newValue = new ModifiedDynamicFloat(modifiers);
+        Variable newValue = new Variable(modifiers);
         if (allValues.Length <= index)
         {
             int newCapacity = 0;
@@ -62,8 +62,8 @@ public class ReactiveValuesSystem
             {
                 newCapacity = allValues.Length >= int.MaxValue / 2 ? int.MaxValue : allValues.Length * 2;
             }
-            ModifiedDynamicFloat[] old = allValues;
-            allValues = new ModifiedDynamicFloat[newCapacity];
+            Variable[] old = allValues;
+            allValues = new Variable[newCapacity];
             System.Array.Copy(old, allValues, old.Length);
         }
         allValues[index] = newValue;
@@ -96,7 +96,7 @@ public class ReactiveValuesSystem
     internal float GetValue(int index)
     {
         if (changed.Count > 0) throw new System.InvalidOperationException("All changes must be applied before getting values!");
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
         if (subject == null) throw new System.NullReferenceException("Nonexist value at " + index);
 
         bool recalculate = false;
@@ -138,11 +138,11 @@ public class ReactiveValuesSystem
     internal float RunFormula (int index)
     {
         if (index >)
-        ModifiedDynamicFloat formula = formulas[index];
+        Variable formula = formulas[index];
         if (formula == null) throw new System.NullReferenceException("Nonexist formula at " + index);
         
         if (changed.Count > 0) throw new System.InvalidOperationException("All changes must be applied before getting values!");
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
 
         bool recalculate = false;
         if (subject.LastAccessedVersion < SystemVersion) // If this is true, this means
@@ -186,7 +186,7 @@ public class ReactiveValuesSystem
             if (!CheckCyclic(m.sourceIndex, index)) throw new System.StackOverflowException("Discovered cyclic dependencies!");
 
         changed.Add(index);
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
         return subject.Modify(m);
     }
 
@@ -196,13 +196,13 @@ public class ReactiveValuesSystem
             if (!CheckCyclic(m.sourceIndex, index)) throw new System.StackOverflowException("Discovered cyclic dependencies!");
 
         changed.Add(index);
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
         return subject.Modify(m, modifierIndex) != -1;
     }
 
     public void SetFixedModifierValue(int index, int modifierIndex, float value)
     {
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
         if (subject.ModifyModifierValue(modifierIndex, value))
         {
             changed.Add(index);
@@ -211,7 +211,7 @@ public class ReactiveValuesSystem
 
     public void ModifyModifierValue(int index, int modifierIndex, int source)
     {
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
         if (subject.ModifyModifierSource(modifierIndex, source))
         {
             changed.Add(index);
@@ -219,7 +219,7 @@ public class ReactiveValuesSystem
     }
     public void ModifyModifierAction(int index, int modifierIndex, ModifierAction action)
     {
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
         if (subject.ModifyModifierAction(modifierIndex, action))
         {
             changed.Add(index);
@@ -228,7 +228,7 @@ public class ReactiveValuesSystem
 
     public void RemoveModifier(int index, int modifierIndex)
     {
-        ModifiedDynamicFloat subject = allValues[index];
+        Variable subject = allValues[index];
         if (subject.RemoveModifier(modifierIndex))
         {
             changed.Add(index);
@@ -239,7 +239,7 @@ public class ReactiveValuesSystem
     {
         foreach (int index in changed)
         {
-            ModifiedDynamicFloat subject = allValues[index];
+            Variable subject = allValues[index];
             if (!subject.changesNotRecalculated) continue;
 
             Recalculate(subject);
@@ -252,7 +252,7 @@ public class ReactiveValuesSystem
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void Recalculate(ModifiedDynamicFloat subject)
+    void Recalculate(Variable subject)
     {
         subject.CachedModifiedValue = 0;
         for (int i = 0; i < subject.modifiers.Length; i++)
@@ -300,7 +300,7 @@ public class ReactiveValuesSystem
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    float CalculateGroup(ModifiedDynamicFloat subject, int groupStart, out int groupEnd, out ModifierAction groupAction)
+    float CalculateGroup(Variable subject, int groupStart, out int groupEnd, out ModifierAction groupAction)
     {
         float groupCache = 0;
         for (int i = groupStart + 1; i < subject.modifiers.Length; i++)
@@ -362,7 +362,7 @@ public class ReactiveValuesSystem
         int minIndex = 0;
         for (int i = 0; i < allValues.Length; i++)
         {
-            ModifiedDynamicFloat subject = allValues[i];
+            Variable subject = allValues[i];
             if (subject == null) continue;
             if (SystemVersion - subject.Version > MAX_VERSION_DIFF_TOLERANCE && SystemVersion < MAX_VERSION_BEFORE_COMPRESS - 1) // Handling extreame case: Even if there's no value change, RECALCULATE to prevent any value being updated too rarely that makes the system can not handle version numver overflowing 
             {

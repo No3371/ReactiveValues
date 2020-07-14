@@ -2,10 +2,10 @@ using System;
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 
-public class ModifiedDynamicFloat
+public class Variable
 {
-    private ModifiedDynamicFloat () {}
-    internal ModifiedDynamicFloat(params ValueModifier[] modifiers)
+    private Variable () {}
+    internal Variable(params ValueModifier[] modifiers)
     {
         this.modifiers = modifiers;
         this.modifierCount = modifiers.Length;
