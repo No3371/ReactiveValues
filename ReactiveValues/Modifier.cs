@@ -1,56 +1,61 @@
 
 using System;
 
-public struct ValueModifier : IEquatable<ValueModifier>
+public struct Modifier : IEquatable<Modifier>
 {
-    internal int sourceIndex;
+    internal int source;
     internal float value;
-
-    internal ValueModifier(ModifierAction modType)
+    internal bool sourceIsFormula;
+    internal Modifier(ModifierAction modType)
     {
-        this.sourceIndex = -1;
+        this.source = -1;
         this.value = 0;
         Action = modType;
         Removed = false;
+        sourceIsFormula = false;
     }
 
-    internal ValueModifier(ModifierAction modType, float initValue)
+    internal Modifier(ModifierAction modType, float initValue)
     {
-        this.sourceIndex = -1;
+        this.source = -1;
         this.value = initValue;
         Action = modType;
         Removed = false;
+        sourceIsFormula = false;
     }
-    internal ValueModifier(ModifierAction modType, int sourceIndex, float initValue)
+    internal Modifier(ModifierAction modType, int sourceIndex, float initValue, bool isFormula = false)
     {
-        this.sourceIndex = sourceIndex;
+        this.source = sourceIndex;
         this.value = initValue;
         Action = modType;
         Removed = false;
+        sourceIsFormula = isFormula;
     }
 
     public ModifierAction Action { get; set; }
     public bool Removed { get; internal set; }
 
-    public bool Equals(ValueModifier other)
+    public bool Equals(Modifier other)
     {
-        return Action == other.Action && sourceIndex == other.sourceIndex && (sourceIndex == -1 ? true : value == other.value) && Removed == other.Removed;
+        return Action == other.Action && source == other.source && (source == -1 ? true : value == other.value) && Removed == other.Removed && sourceIsFormula == other.sourceIsFormula;
     }
 
     public override int GetHashCode()
     {
         unchecked
         {
-            uint hash = (uint) System.Math.Abs(sourceIndex);
+            uint hash = (uint) System.Math.Abs(source);
             hash = hash * 13 + (byte) Action; 
             hash = hash * 13 + (uint) (System.Math.Abs(value) * 100);
+            if (Removed) hash *= 31;
+            if (sourceIsFormula) hash *= 71;
             return (int) hash;
         }
     }
 
-    public static ValueModifier PlaceHolder ()
+    public static Modifier PlaceHolder ()
     {
-        ValueModifier m = new ValueModifier(ModifierAction.PlaceHolder);
+        Modifier m = new Modifier(ModifierAction.PlaceHolder);
         m.Removed = true;
         return m;
     }

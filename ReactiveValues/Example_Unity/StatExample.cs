@@ -43,40 +43,40 @@ public class StatExample : MonoBehaviour
         stat.NameValue(i++, "SPD");
         stat.NameValue(i++, "LUCK");
         #endif
-        strengthID = stat.MakeValue(new ValueModifier(ModifierAction.SET, strBase),
-                                    new ValueModifier(ModifierAction.MULTIPLY, STR_MULTIPLIER)); //version: 1
-        attackID = stat.MakeValue(new ValueModifier(ModifierAction.ADD, strengthID, stat.GetValue(strengthID)),
-                                  new ValueModifier(ModifierAction.MULTIPLY, atk_strMultiplier),
-                                  new ValueModifier(ModifierAction.ADD, atk_Bonus)); //version: 2
+        strengthID = stat.MakeValue(new Modifier(ModifierAction.SET, strBase),
+                                    new Modifier(ModifierAction.MULTIPLY, STR_MULTIPLIER)); //version: 1
+        attackID = stat.MakeValue(new Modifier(ModifierAction.ADD, strengthID, stat.GetValue(strengthID)),
+                                  new Modifier(ModifierAction.MULTIPLY, atk_strMultiplier),
+                                  new Modifier(ModifierAction.ADD, atk_Bonus)); //version: 2
         damageID = stat.MakeValue(
-            new ValueModifier(ModifierAction.SET, attackID, stat.GetValue(attackID)),
-            new ValueModifier(ModifierAction.MULTIPLY, 1.05f)); //version: 3
-        dexterityID = stat.MakeValue(new ValueModifier(ModifierAction.SET, dexBase));
+            new Modifier(ModifierAction.SET, attackID, stat.GetValue(attackID)),
+            new Modifier(ModifierAction.MULTIPLY, 1.05f)); //version: 3
+        dexterityID = stat.MakeValue(new Modifier(ModifierAction.SET, dexBase));
 
         speedID = stat.MakeValue(
-            new ValueModifier(ModifierAction.BeginGroup), // 0 -> CalculateGroup
-                new ValueModifier(ModifierAction.ADD, strengthID, stat.GetValue(strengthID)), // 1
-                new ValueModifier(ModifierAction.MULTIPLY, SPD_STR_WEIGHT), // 2
-            new ValueModifier(ModifierAction.EndGroupADD), // 3 <-CalculateGroup
-            new ValueModifier(ModifierAction.BeginGroup),
-                new ValueModifier(ModifierAction.ADD, dexterityID, stat.GetValue(dexterityID)),
-                new ValueModifier(ModifierAction.MULTIPLY, SPD_DEX_WEIGHT),
-            new ValueModifier(ModifierAction.EndGroupADD));
+            new Modifier(ModifierAction.BeginGroup), // 0 -> CalculateGroup
+                new Modifier(ModifierAction.ADD, strengthID, stat.GetValue(strengthID)), // 1
+                new Modifier(ModifierAction.MULTIPLY, SPD_STR_WEIGHT), // 2
+            new Modifier(ModifierAction.EndGroupADD), // 3 <-CalculateGroup
+            new Modifier(ModifierAction.BeginGroup),
+                new Modifier(ModifierAction.ADD, dexterityID, stat.GetValue(dexterityID)),
+                new Modifier(ModifierAction.MULTIPLY, SPD_DEX_WEIGHT),
+            new Modifier(ModifierAction.EndGroupADD));
 
         
         luckID = stat.MakeValue(
-            new ValueModifier(ModifierAction.BeginGroup),
-                new ValueModifier(ModifierAction.BeginGroup),
-                    new ValueModifier(ModifierAction.ADD, strengthID, stat.GetValue(strengthID)), 
-                    new ValueModifier(ModifierAction.MULTIPLY, luck_STRWeight),
-                new ValueModifier(ModifierAction.EndGroupADD), 
-                new ValueModifier(ModifierAction.BeginGroup),
-                    new ValueModifier(ModifierAction.ADD, dexterityID, stat.GetValue(dexterityID)),
-                    new ValueModifier(ModifierAction.MULTIPLY, luck_DEXWeight),
-                new ValueModifier(ModifierAction.EndGroupADD),
-            new ValueModifier(ModifierAction.EndGroupADD),
-            new ValueModifier(ModifierAction.ADD, speedID, stat.GetValue(speedID)),
-            new ValueModifier(ModifierAction.MULTIPLY, luckFinalMultiplier)
+            new Modifier(ModifierAction.BeginGroup),
+                new Modifier(ModifierAction.BeginGroup),
+                    new Modifier(ModifierAction.ADD, strengthID, stat.GetValue(strengthID)), 
+                    new Modifier(ModifierAction.MULTIPLY, luck_STRWeight),
+                new Modifier(ModifierAction.EndGroupADD), 
+                new Modifier(ModifierAction.BeginGroup),
+                    new Modifier(ModifierAction.ADD, dexterityID, stat.GetValue(dexterityID)),
+                    new Modifier(ModifierAction.MULTIPLY, luck_DEXWeight),
+                new Modifier(ModifierAction.EndGroupADD),
+            new Modifier(ModifierAction.EndGroupADD),
+            new Modifier(ModifierAction.ADD, speedID, stat.GetValue(speedID)),
+            new Modifier(ModifierAction.MULTIPLY, luckFinalMultiplier)
         );
 
         UpdateString();
@@ -154,7 +154,7 @@ public class StatExample : MonoBehaviour
     public void OnATKBonusToggled (bool toggle)
     {
         if (!toggle) stat.RemoveModifier(attackID, 2);
-        else stat.ReplaceModifier(attackID, 2, new ValueModifier(ModifierAction.ADD, atk_Bonus));
+        else stat.ReplaceModifier(attackID, 2, new Modifier(ModifierAction.ADD, atk_Bonus));
         stat.ApplyChanges();
         UpdateString();
     }

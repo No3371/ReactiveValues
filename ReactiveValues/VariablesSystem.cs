@@ -19,10 +19,15 @@ public class VariablesSystem
     const uint MAX_VERSION_BEFORE_COMPRESS_BUFFER = 100;
     public uint SystemVersion { get; private set; }
     public bool AnyChangesSinceLastGet { get; private set; }
-    HashSet<int> changed;
-    Variable[] allValues;
+    private HashSet<int> changed;
+    private Variable[] allValues;
     static Variable[] formulas;
-    FormulaBindings[] bindings;
+    private static int startingFormulaBlockLength = 0;
+    private static Dictionary<int, string> formulaName;
+    private FormulaBindings[] bindings;
+    private static Dictionary<int, string> FormulaName { get => formulaName = formulaName?? new Dictionary<int, string>(); }
+    private FormulaBindings[] Bindings { get => bindings = bindings ?? new FormulaBindings[1]; set => bindings = value; }
+    private static Variable[] Formulas { get => formulas = formulas ?? new Variable[1]; set => formulas = value; }
     int valueCount = 0, startingValueBlockLength = 0;
     public VariablesSystem()
     {
@@ -32,29 +37,77 @@ public class VariablesSystem
         this.allValues = new Variable[8];
     }
 
-    public static int MakeFormula (params ValueModifier[] modifiers)
+    public static int MakeFormula (string ID = null, params Modifier[] modifiers)
     {
-        Variable newFormula = new Variable(modifiers);
+        while (Formulas[startingFormulaBlockLength] != null) startingFormulaBlockLength++;
+        MakeFormulaInternal(startingFormulaBlockLength, modifiers);
+        if (ID != null) FormulaName.Add(startingFormulaBlockLength, ID);
+        LogConditional(string.Format("VariablesSystem: [MAKE_FORMULA] {0}: {1}", ID, startingFormulaBlockLength));
+        return startingFormulaBlockLength;
     }
 
-    public int MakeValue(params ValueModifier[] modifiers)
+    public static int MakeFormulaAtIndex(int index, string ID = null, params Modifier[] modifiers)
     {
-        Variable newValue = new Variable(modifiers);
+        if (Formulas[index] != null) throw new System.ArgumentException("You can not create new formula on existing formula's slot!");
+        MakeFormulaInternal(index, modifiers);
+        if (ID != null) FormulaName.Add(startingFormulaBlockLength, ID);
+        LogConditional(string.Format("VariablesSystem: [MAKE_FORMULA] {0}: {1}", ID, index));
+        return index;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void MakeFormulaInternal (int index, params Modifier[] modifiers)
+    {
+        if (Formulas.Length <= index)
+        {
+            int newCapacity = 0;
+            while (Formulas.Length <= index)
+            {
+                newCapacity = Formulas.Length >= int.MaxValue / 2 ? int.MaxValue : Formulas.Length * 2;
+            }
+            Variable[] old = Formulas;
+            Formulas = new Variable[newCapacity];
+            System.Array.Copy(old, Formulas, old.Length);
+        }
+        Variable newFormula = new Variable(modifiers);
+        Formulas[index] = newFormula;
+    }
+
+    public void Bind (int formulaIndex, FormulaBindings binding)
+    {
+        if (Bindings.Length <= formulaIndex)
+        {
+            int newCapacity = 0;
+            while (Bindings.Length <= formulaIndex)
+            {
+                newCapacity = Bindings.Length >= int.MaxValue / 2 ? int.MaxValue : Bindings.Length * 2;
+            }
+            FormulaBindings[] old = Bindings;
+            Bindings = new FormulaBindings[newCapacity];
+            System.Array.Copy(old, Bindings, old.Length);
+        }
+        Bindings[formulaIndex] = binding;
+    }
+
+    public int MakeValue(params Modifier[] modifiers)
+    {
         while (allValues[startingValueBlockLength] != null) startingValueBlockLength++;
-        allValues[startingValueBlockLength] = newValue;
-        Recalculate(newValue);
-        valueCount++;
-        newValue.Version = SystemVersion++;
-        LogConditional(string.Format("RxValues#{0}: [MAKE] {1}: {2} (ver{3}, s.ver{4})", SystemID, GetValueName(startingValueBlockLength), newValue.CachedModifiedValue, newValue.Version, SystemVersion));
-        CompressIfVersionWillOverflow();
+        MakeVariableInternal(startingValueBlockLength);
         // Never a node will point to this node before it's created so we don't chek for cyclic here.
         return startingValueBlockLength;
     }
 
-    public int MakeValueAtIndex(int index, params ValueModifier[] modifiers)
+    public int MakeValueAtIndex(int index, params Modifier[] modifiers)
     {
         if (allValues[index] != null) throw new System.ArgumentException("You can not create new value on existing value's slot!");
-        Variable newValue = new Variable(modifiers);
+        MakeVariableInternal(index, modifiers);
+        // Never a node will point to this node before it's created so we don't chek for cyclic here.
+        return index;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void MakeVariableInternal (int index, params Modifier[] modifiers)
+    {
         if (allValues.Length <= index)
         {
             int newCapacity = 0;
@@ -66,23 +119,22 @@ public class VariablesSystem
             allValues = new Variable[newCapacity];
             System.Array.Copy(old, allValues, old.Length);
         }
+        Variable newValue = new Variable(modifiers);
         allValues[index] = newValue;
         Recalculate(newValue);
         valueCount++;
         newValue.Version = SystemVersion++;
-        LogConditional(string.Format("RxValues#{0}: [MAKE] {1}: {2} (ver{3}, s.ver{4})", SystemID, GetValueName(index), newValue.CachedModifiedValue, newValue.Version, SystemVersion));
+        LogConditional(string.Format("VariablesSystem#{0}: [MAKE] {1}: {2} (ver{3}, s.ver{4})", SystemID, GetValueName(index), newValue.CachedModifiedValue, newValue.Version, SystemVersion));
         CompressIfVersionWillOverflow();
-        // Never a node will point to this node before it's created so we don't chek for cyclic here.
-        return index;
     }
 
     internal bool CheckCyclic(int target, int startIndex)
     {
         for (int i = 0; i < allValues[startIndex].modifiers.Length; i++)
         {
-            if (allValues[startIndex].modifiers[i].sourceIndex == -1) continue;
-            if (allValues[startIndex].modifiers[i].sourceIndex == target) return true;
-            else return CheckCyclic(target, allValues[startIndex].modifiers[i].sourceIndex);
+            if (allValues[startIndex].modifiers[i].source == -1) continue;
+            if (allValues[startIndex].modifiers[i].source == target) return true;
+            else return CheckCyclic(target, allValues[startIndex].modifiers[i].source);
         }
         return false;
     }
@@ -101,27 +153,29 @@ public class VariablesSystem
 
         bool recalculate = false;
         if (subject.LastAccessedVersion < SystemVersion) // If this is true, this means
+        {
             for (int i = 0; i < subject.modifiers.Length; i++) // If any of the source values is newer then this, RECALCULATE 
             {
-                int source = subject.modifiers[i].sourceIndex;
-                if (source != -1)
+                Modifier modifier = subject.modifiers[i];
+                if (modifier.source != -1)
                 {
-                    if (allValues[source].Version > subject.Version)
+                    if (allValues[modifier.source].Version > subject.Version)
                     {
-                        subject.modifiers[i].value = GetValue(source); // Update cache of source value
+                        subject.modifiers[i].value = modifier.sourceIsFormula? RunFormula(modifier.source) : GetValue(modifier.source); // Update cache of source value
                         Recalculate(subject);
                         recalculate = true;
-                        LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: source updated)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
+                        LogConditional(string.Format("VariablesSystem#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: source updated)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
                         break;
                     }
                 }
             }
+        }
 
         if (SystemVersion - subject.Version > MAX_VERSION_DIFF_TOLERANCE) // Handling extreame case: Even if there's no value change, RECALCULATE to prevent any value being updated too rarely that makes the system can not handle version numver overflowing 
         {
             Recalculate(subject);
             recalculate = true;
-            LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: version too old, MAX_VERSION_DIFF_TOLERANCE triggered)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
+            LogConditional(string.Format("VariablesSystem#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: version too old, MAX_VERSION_DIFF_TOLERANCE triggered)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
         }
 
         if (recalculate)
@@ -137,69 +191,99 @@ public class VariablesSystem
 
     internal float RunFormula (int index)
     {
-        if (index >)
-        Variable formula = formulas[index];
+        Variable formula = Formulas[index];
         if (formula == null) throw new System.NullReferenceException("Nonexist formula at " + index);
-        
-        if (changed.Count > 0) throw new System.InvalidOperationException("All changes must be applied before getting values!");
-        Variable subject = allValues[index];
-
-        bool recalculate = false;
-        if (subject.LastAccessedVersion < SystemVersion) // If this is true, this means
-            for (int i = 0; i < subject.modifiers.Length; i++) // If any of the source values is newer then this, RECALCULATE 
+        if (changed.Count > 0) throw new System.InvalidOperationException("All changes must be applied before running values!");
+        if (Bindings.Length <= index || Bindings[index] == null) throw new System.NullReferenceException("The system has not bind to the formula# " + index);
+        formula.CachedModifiedValue = formula.BaseValue;
+        for (int i = 0; i < formula.modifiers.Length; i++)
+        {
+            var binding = Bindings[index].bindings[formula.modifiers[i].source];
+            if (binding.sourceIndex != -1)
+                formula.modifiers[i].value = GetValue(binding.sourceIndex);
+            else
+                formula.modifiers[i].value = binding.value;
+        }
+        for (int i = 0; i < formula.modifiers.Length; i++)
+        {
+            if (formula.modifiers[i].Removed) continue;
+            switch (formula.modifiers[i].Action)
             {
-                int source = subject.modifiers[i].sourceIndex;
-                if (source != -1)
-                {
-                    if (allValues[source].Version > subject.Version)
+                case ModifierAction.SET:
+                    formula.CachedModifiedValue = formula.modifiers[i].value;
+                    break;
+                case ModifierAction.ADD:
+                    formula.CachedModifiedValue += formula.modifiers[i].value;
+                    break;
+                case ModifierAction.SUBTRACT:
+                    formula.CachedModifiedValue -= formula.modifiers[i].value;
+                    break;
+                case ModifierAction.MULTIPLY:
+                    formula.CachedModifiedValue *= formula.modifiers[i].value;
+                    break;
+                case ModifierAction.DEVIDE:
+                    formula.CachedModifiedValue /= formula.modifiers[i].value;
+                    break;
+                case ModifierAction.BeginGroup:
+                    float result = CalculateGroup(formula, i, out i, out ModifierAction nestedGroupAction);
+                    switch (nestedGroupAction)
                     {
-                        subject.modifiers[i].value = GetValue(source); // Update cache of source value
-                        Recalculate(subject);
-                        recalculate = true;
-                        LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: source updated)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
-                        break;
+                        case ModifierAction.EndGroupADD:
+                            formula.CachedModifiedValue += result;
+                            break;
+                        case ModifierAction.EndGroupSUBTRACT:
+                            formula.CachedModifiedValue -= result;
+                            break;
+                        case ModifierAction.EndGroupMULTIPLY:
+                            formula.CachedModifiedValue *= result;
+                            break;
+                        case ModifierAction.EndGroupDEVIDE:
+                            formula.CachedModifiedValue /= result;
+                            break;
+                        default:
+                            throw new System.ArgumentException("Not EndGroupXXX action when calculated group!");
                     }
-                }
+                    break;
             }
-
-        if (SystemVersion - subject.Version > MAX_VERSION_DIFF_TOLERANCE) // Handling extreame case: Even if there's no value change, RECALCULATE to prevent any value being updated too rarely that makes the system can not handle version numver overflowing 
-        {
-            Recalculate(subject);
-            recalculate = true;
-            LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: version too old, MAX_VERSION_DIFF_TOLERANCE triggered)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
         }
 
-        if (recalculate)
-        {
-            subject.changesNotRecalculated = false;
-            subject.Version = SystemVersion++;
-            CompressIfVersionWillOverflow();
-        }
-
-        subject.LastAccessedVersion = SystemVersion;
-        return subject.CachedModifiedValue;
+        return formula.CachedModifiedValue;
     }
 
-    public int ModifyValue(int index, ValueModifier m)
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ModifyBaseValue(int index, float baseValue)
     {
-        if (m.sourceIndex != -1)
-            if (!CheckCyclic(m.sourceIndex, index)) throw new System.StackOverflowException("Discovered cyclic dependencies!");
+        Variable subject = allValues[index];
+        if (subject.BaseValue == baseValue) return;
+        changed.Add(index);
+        subject.BaseValue = baseValue;
+        subject.changesNotRecalculated = true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int ModifyValue(int index, Modifier m)
+    {
+        if (m.source != -1)
+            if (!CheckCyclic(m.source, index)) throw new System.StackOverflowException("Discovered cyclic dependencies!");
 
         changed.Add(index);
         Variable subject = allValues[index];
         return subject.Modify(m);
     }
 
-    public bool ReplaceModifier(int index, int modifierIndex, ValueModifier m)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool ReplaceModifier(int index, int modifierIndex, Modifier m)
     {
-        if (m.sourceIndex != -1)
-            if (!CheckCyclic(m.sourceIndex, index)) throw new System.StackOverflowException("Discovered cyclic dependencies!");
+        if (m.source != -1)
+            if (!CheckCyclic(m.source, index)) throw new System.StackOverflowException("Discovered cyclic dependencies!");
 
         changed.Add(index);
         Variable subject = allValues[index];
         return subject.Modify(m, modifierIndex) != -1;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetFixedModifierValue(int index, int modifierIndex, float value)
     {
         Variable subject = allValues[index];
@@ -209,6 +293,7 @@ public class VariablesSystem
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ModifyModifierValue(int index, int modifierIndex, int source)
     {
         Variable subject = allValues[index];
@@ -217,6 +302,8 @@ public class VariablesSystem
             changed.Add(index);
         }
     }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ModifyModifierAction(int index, int modifierIndex, ModifierAction action)
     {
         Variable subject = allValues[index];
@@ -226,6 +313,7 @@ public class VariablesSystem
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveModifier(int index, int modifierIndex)
     {
         Variable subject = allValues[index];
@@ -245,16 +333,15 @@ public class VariablesSystem
             Recalculate(subject);
             subject.changesNotRecalculated = false;
             subject.Version = SystemVersion++;
-            LogConditional(string.Format("RxValues#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: apply changes)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
+            LogConditional(string.Format("VariablesSystem#{0}: [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: apply changes)", SystemID, GetValueName(index), subject.CachedModifiedValue, subject.Version, SystemVersion));
             CompressIfVersionWillOverflow();
         }
         changed.Clear();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void Recalculate(Variable subject)
     {
-        subject.CachedModifiedValue = 0;
+        subject.CachedModifiedValue = subject.BaseValue;
         for (int i = 0; i < subject.modifiers.Length; i++)
         {
             if (subject.modifiers[i].Removed) continue;
@@ -299,7 +386,6 @@ public class VariablesSystem
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     float CalculateGroup(Variable subject, int groupStart, out int groupEnd, out ModifierAction groupAction)
     {
         float groupCache = 0;
@@ -367,7 +453,7 @@ public class VariablesSystem
             if (SystemVersion - subject.Version > MAX_VERSION_DIFF_TOLERANCE && SystemVersion < MAX_VERSION_BEFORE_COMPRESS - 1) // Handling extreame case: Even if there's no value change, RECALCULATE to prevent any value being updated too rarely that makes the system can not handle version numver overflowing 
             {
                 Recalculate(subject);
-                LogConditional(string.Format("RxValues#{0}: [COMPRESS] [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: version too old, MAX_VERSION_DIFF_TOLERANCE triggered)", SystemID, GetValueName(i), subject.CachedModifiedValue, subject.Version, SystemVersion));
+                LogConditional(string.Format("VariablesSystem#{0}: [COMPRESS] [RECALC] {1}: {2} (ver{3}, s.ver{4}) (reason: version too old, MAX_VERSION_DIFF_TOLERANCE triggered)", SystemID, GetValueName(i), subject.CachedModifiedValue, subject.Version, SystemVersion));
                 subject.changesNotRecalculated = false;
                 subject.Version = SystemVersion++;
             }
@@ -383,7 +469,7 @@ public class VariablesSystem
             allValues[i].Version -= minVersion;
         }
         SystemVersion -= minVersion;
-        LogConditional(string.Format("RxValues#{0}: [COMPRESS] MinAt: {1} ({2}), Shifted: -{3}", SystemID, minIndex, GetValueName(minIndex), minVersion));
+        LogConditional(string.Format("VariablesSystem#{0}: [COMPRESS] MinAt: {1} ({2}), Shifted: -{3}", SystemID, minIndex, GetValueName(minIndex), minVersion));
     }
 
     private Dictionary<int, string> stringToValueID;

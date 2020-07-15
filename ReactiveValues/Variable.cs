@@ -4,20 +4,20 @@ using System.Runtime.CompilerServices;
 
 public class Variable
 {
+    public float BaseValue { get; set; }
     private Variable () {}
-    internal Variable(params ValueModifier[] modifiers)
+    internal Variable(params Modifier[] modifiers)
     {
         this.modifiers = modifiers;
         this.modifierCount = modifiers.Length;
         changesNotRecalculated = true;
     }
     public float CachedModifiedValue { get; internal set; }
-    internal ValueModifier[] modifiers;
-    public ReadOnlyCollection<ValueModifier> ExamineModifiers()
+    internal Modifier[] modifiers;
+    public ReadOnlyCollection<Modifier> ExamineModifiers()
     {
-        return Array.AsReadOnly<ValueModifier>(modifiers);
+        return Array.AsReadOnly<Modifier>(modifiers);
     }
-
 
     int modifierCount = 0;
     public uint Version { get; internal set; }
@@ -25,14 +25,14 @@ public class Variable
 
     internal bool changesNotRecalculated;
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal int Modify(ValueModifier m, int specificIndex = -1)
+    internal int Modify(Modifier m, int specificIndex = -1)
     {
         int index = 0;
         if (specificIndex == -1)
         {
             if (modifierCount == modifiers.Length)
             {
-                modifiers = new ValueModifier[modifiers.Length * 2];
+                modifiers = new Modifier[modifiers.Length * 2];
                 modifiers[modifierCount] = m;
                 index = modifierCount++;
             }
@@ -57,7 +57,7 @@ public class Variable
     {
         if (index >= modifiers.Length) throw new System.IndexOutOfRangeException(string.Format("The value only has {0} modifiers, trying to modify the {1}", modifiers.Length, index)); 
         if (modifiers[index].Removed) throw new System.InvalidOperationException("Modifying a removed modifieris not allowed!");
-        if (modifiers[index].sourceIndex != -1) throw new System.InvalidOperationException("Setting value on a dynamic modifier is not allowed!");
+        if (modifiers[index].source != -1) throw new System.InvalidOperationException("Setting value on a dynamic modifier is not allowed!");
         if ((byte) modifiers[index].Action >= 100) throw new System.InvalidOperationException("Setting value on a" + modifiers[index].Action + " modifier is not allowed!");
         if (modifiers[index].value == value) return false;
         modifiers[index].value = value;
@@ -71,8 +71,8 @@ public class Variable
         if (index >= modifiers.Length) throw new System.IndexOutOfRangeException(string.Format("The value only has {0} modifiers, trying to modify the {1}", modifiers.Length, index));
         if (modifiers[index].Removed)throw new System.InvalidOperationException("Modifying a removed modifieris not allowed!");
         if ((byte) modifiers[index].Action >= 100) throw new System.InvalidOperationException("Setting source on a" + modifiers[index].Action + " modifier is not allowed!");
-        if (modifiers[index].sourceIndex == source) return false;
-        modifiers[index].sourceIndex = source;
+        if (modifiers[index].source == source) return false;
+        modifiers[index].source = source;
         changesNotRecalculated = true;
         return true;
     }
