@@ -1,5 +1,5 @@
 # ReactiveValues
-C#. 
+An experimental implmentation of system of relative values that auto get recalculated based on defined dependencies.
 
 
 ## ValueSystem, Value, Modifier, Formula, FormulaBind
